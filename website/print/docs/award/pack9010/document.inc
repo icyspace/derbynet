@@ -47,31 +47,38 @@ class Pack9010Certificate extends PrintableAwardDocument {
 
     $this->pdf->AddFont('BlackChancery', '', 'black-chancery.php');
     $this->pdf->AddFont('helvetica', '', 'helvetica.php');
-    $this->pdf->AddFont('hk-grotesk.semibold-italic', '', 'StarJedi-DGRW.php');
+    $this->pdf->AddFont('hk-grotesk.semibold', '', 'hk-grotesk.semibold.php');
 
     $this->pdf->Image(dirname(__FILE__).'/pinederby-certificate.png',
                       $left, $top, $params['width']);
 
-    $this->pdf->SetFont('helvetica', '', 30);
+    $this->pdf->SetFont('hk-grotesk.semibold', '', 30);
 
     // Award name
     $award_name_width = $this->pdf->GetStringWidth($award['awardname']);
-    $this->DrawCenteredUnderlay($cx, $top + 2.0, $award_name_width + 1.0, 0.75);
+    //$this->DrawCenteredUnderlay($cx, $top + 2.0, $award_name_width + 1.0, 0.75);
     $this->pdf->CenteredSequence($cx + 1.1 , $top + 3.5, array($award['awardname']));
 
     $this->pdf->SetLineWidth(0.01);
     // Recipient
     if (isset($award['firstname'])) {
-      $this->pdf->SetFont('hk-grotesk.semibold-italic', '', 40);
-      $recip = $award['firstname'].' '.$award['lastname'];
+      
+      $recip = strtoupper($award['firstname'].' '.$award['lastname']);
       $recip_width = $this->pdf->GetStringWidth($recip);
       $recip_width += 1.0;
-      $this->DrawCenteredUnderlay($cx, $cy - 0.5, $recip_width, 1.0);
+     // $recip = $recip. $recip_width;
+      if ($recip_width > 7.3) {
+        $this->pdf->SetFont('hk-grotesk.semibold', '', 34);
+      } else {
+        $this->pdf->SetFont('hk-grotesk.semibold', '', 40);
+      }
+
+     // $this->DrawCenteredUnderlay($cx, $cy - 0.5, $recip_width, 1.0);
       $this->pdf->CenteredSequence($cx + 1, $cy + .9 , array($recip));
     } else {
       $this->pdf->SetDrawColor(0);
       $recip_width = 6.0;
-      $this->DrawCenteredUnderlay($cx, $cy - 0.75, $recip_width + 1.0, 1.0);
+    //  $this->DrawCenteredUnderlay($cx, $cy - 0.75, $recip_width + 1.0, 1.0);
       $this->pdf->Line($cx - $recip_width / 2, $cy, $cx + $recip_width / 2, $cy);
     }
 
