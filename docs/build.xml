@@ -9,11 +9,9 @@
    <!-- Set soffice for Windows if that's where we are, otherwise use
 	standard (Mac) value -->
    <condition property="soffice"
-	      value="\Program Files (x86)\LibreOffice 5\program\soffice.exe">
+	      value="\Program Files\LibreOffice\program\soffice.exe">
      <os family="windows"/>
    </condition>
-   <property name="soffice"
-	     location="/Applications/LibreOffice.app/Contents/MacOS/soffice"/>
    <condition property="is_windows">
      <os family="windows"/>
    </condition>
