@@ -1,0 +1,9 @@
+<?php @session_start();
+
+$lane_to_column_fn =
+"function lane_to_column(lane) {
+  return g_number_of_lanes - lane;
+}";
+
+require_once('inc/columnar-now-racing.inc');
+?>

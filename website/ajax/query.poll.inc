@@ -90,6 +90,7 @@ function json_common_1($key, &$now_running) {
     json_out('use-subgroups', use_subgroups());
     json_out('group-formation-rule', group_formation_rule());
     json_out('labels', labels());
+    json_out('full-field-calc', read_raceinfo('full-field-calc', 0));
     break;
   case 'racers':  
     require_once('inc/json-current-racers.inc');
@@ -105,7 +106,13 @@ function json_common_1($key, &$now_running) {
     } else {
       require_once('inc/photos-on-now-racing.inc');
       $render = false;
-      if (isset($_GET['row-height']) && $_GET['row-height'] > 0) {
+      $render2 = false;
+      if (isset($_GET['head-size'])) {
+        $render = photo_repository('head')->lookup_or_any($_GET['head-size']);
+        if (isset($_GET['car-size'])) {
+          $render2 = photo_repository('car')->lookup_or_any($_GET['car-size']);
+        }
+      } else if (isset($_GET['row-height']) && $_GET['row-height'] > 0) {
         if (isset($_GET['repo'])) {
           $photos = $_GET['repo'];
           if (!photo_repository($photos)) {
@@ -120,7 +127,8 @@ function json_common_1($key, &$now_running) {
         }
       }
 
-      json_out('racers', json_current_racers($now_running, read_name_style(), $render));
+      json_out('racers',
+               json_current_racers($now_running, read_name_style(), $render, $render2));
     }
     break;
   case 'replay-state':
@@ -130,6 +138,10 @@ function json_common_1($key, &$now_running) {
   case 'rounds':
     require_once('inc/json-rounds.inc');
     json_out('rounds', json_all_rounds($now_running));
+    break;
+  case 'schedule':
+    require_once('inc/json-schedule.inc');
+    json_out('schedule', json_schedule($now_running['roundid']));
     break;
   case 'timer-state':
     require_once('inc/json-timer-state.inc');

@@ -32,7 +32,7 @@ require_permission(CHECK_IN_RACERS_PERMISSION);
 // (and $xbs_award_name will be blank), and the checkboxes won't be
 // shown.
 $xbs = read_raceinfo_boolean('use-xbs');
-$xbs_award_name = read_raceinfo('xbs-award', 'Exclusively By Scout');
+$xbs_award_name = xbs_award();
 
 $order = '';
 if (isset($_GET['order']))
@@ -79,6 +79,7 @@ var g_preferred_urls = <?php echo json_encode(preferred_urls(/*use_https=*/true)
 <script type="text/javascript" src="js/dropzone.min.js"></script>
 <script type="text/javascript" src="js/partitions-modal.js"></script>
 <script type="text/javascript" src="js/video-device-picker.js"></script>
+<script type="text/javascript" src="js/imagecapture.js"></script>
 <script type="text/javascript" src="js/photo-capture-modal.js"></script>
 <script type="text/javascript" src="js/checkin.js"></script>
 </head>
@@ -99,6 +100,8 @@ make_banner('Racer Check-In');
 <?php if (have_permission(REGISTER_NEW_RACER_PERMISSION)) { ?>
       <input type="button" value="New Racer"
         onclick='show_new_racer_form();'/>
+<?php } else { ?>
+          <div style='padding: 10px 15px; font-size: x-large; line-height: 1.3; margin-bottom: 20px; margin-top: 3px; '>&nbsp;</div>
 <?php } ?>
 </div>
 
@@ -157,7 +160,8 @@ $sql = checkin_table_SELECT_FROM_sql()
              ($order == 'partition' ? 'partition_sortorder, lastname, firstname' :
               'lastname, firstname')));
 
-$stmt = $db->query($sql);
+$stmt = $db->prepare($sql);
+$stmt->execute(array(':xbs_award_name' => xbs_award()));
 ?>
 
 <script>

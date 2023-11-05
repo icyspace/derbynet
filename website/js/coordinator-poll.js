@@ -156,13 +156,9 @@ function generate_timer_state_group(tstate) {
 }
 
 function generate_replay_state_group(replay_state) {
-    $("#replay_status").text(replay_state.status);
-    $("#replay_status_icon").attr('src', replay_state.icon);
-    if (replay_state.connected) {
-        $("#test_replay").removeClass("hidden");
-    } else {
-        $("#test_replay").addClass("hidden");
-    }
+  $("#replay_status").text(replay_state.message);
+  $("#replay_status_icon").attr('src', replay_state.icon);
+  $("#test_replay").toggleClass("hidden", !replay_state.connected);
 }
 
 // Updates progress bars with new progress values
@@ -316,6 +312,12 @@ function inject_into_scheduling_control_group(round, current, timer_state) {
                    + ' onclick="handle_master_next_up()" value="Next Up"/>');
   } else {
     if (round.heats_scheduled > 0 && round.heats_run == 0) {
+      if (round.unscheduled > 0) {
+        buttons.append(
+          $('<div class="late-arrival-prompt"></div>').text(
+            'The race schedule needs to be regenerated because a new racer has been added. ' +
+              'Start by removing the existing race schedule.'));
+      }
       buttons.append('<input type="button"'
                      + ' onclick="handle_unschedule_button(' + round.roundid
                      + ', \'' + round['class'].replace(/"/g, '&quot;').replace(/'/, "\\'") + '\', '
@@ -332,10 +334,13 @@ function inject_into_scheduling_control_group(round, current, timer_state) {
                          " been determined.<br/>" +
                          "Enter the number of lanes on the <a href='settings.php'>Settings</a> page.</p>");
         }
-      } else if (false /* TODO: Reschedule is not ready for prime time */) {
-        buttons.append('<input type="button"' 
+      } else {
+        buttons.append(
+          $('<div class="late-arrival-prompt"></div>').text(
+            'The race schedule needs to be adjusted because a new racer has been added.'));
+        buttons.append('<input type="button" class="late-arrival-button"'
                        + ' onclick="handle_reschedule_button(' + round.roundid + ')"'
-                       + ' value="Reschedule"/>');
+                       + ' value="Adjust Schedule"/>');
       }
     }
 
@@ -654,8 +659,9 @@ function process_coordinator_poll_json(json) {
           .append($("<div id='timer-testing-herald'></div>")
                   .append($("<h3></h3>")
                           .append($("<span></span>").text(json['refused-results']))
-                          .append(" unexpected results from timer have been received."))
-                  .append("<p>Turn on racing mode or simulate racing if you wish to record results.</p>"));
+                          .append(json['refused-results'] == 1
+                                  ? " unexpected result from timer has been received."
+                                  : " unexpected results from timer have been received.")));
   } else {
     $('#timer-testing-herald').remove();
   }
@@ -663,7 +669,8 @@ function process_coordinator_poll_json(json) {
   $("#not-racing-warning").toggleClass('hidden', json['current-heat']['now_racing']);;
 
   $("#playlist-start").toggleClass('hidden',
-                                   !(json['current-heat'].roundid == -1 && json.rounds.some(r => r.next)));
+                                   !(json['current-heat'].roundid == -1 &&
+                                     json.rounds.some(r => r['next-round'])));
 
   // Hide the control group if there's nothing to show
   $("#supplemental-control-group").toggleClass("hidden",

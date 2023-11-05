@@ -21,7 +21,7 @@ function poll_max_carnumbers() {
 }
 function next_carnumber(partitionid) {
   // NOTE: 100 * partitionid expression also in car-numbers poll query
-  return 1 + (g_max_carnumbers?.[partitionid] || (100 * partitionid));
+  return 1 + (g_max_carnumbers[partitionid] || (100 * partitionid));
 }
 $(function() {
   setInterval(poll_max_carnumbers, 10000);
@@ -721,6 +721,7 @@ function make_table_row(racer, xbs) {
               .append($('<label/>')
                       .attr('for', 'xbs-' + racer.racerid)
                       .text(xbs + '?'))
+              .append('<br/>')
               .append($('<input type="checkbox" class="flipswitch"/>')
                       .attr('name', 'xbs-' + racer.racerid)
                       .prop('checked', racer.xbs)
