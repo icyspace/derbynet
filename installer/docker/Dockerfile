@@ -59,3 +59,4 @@ EXPOSE 80 443
 STOPSIGNAL SIGTERM
 
 CMD ["/bin/bash", "-c", "php-fpm82 && chmod 777 /var/run/php/php-fpm.sock && nginx -g 'daemon off;'"]
+
