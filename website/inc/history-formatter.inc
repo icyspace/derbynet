@@ -333,7 +333,7 @@ class HistoryActionFormatter {
     case 'partition.*create':
       $this->_partitions->InsertWithId(array('partitionid' => $this->_action['partitionid'],
                                              'name' => $this->_action['name'],
-                                             'rankid' => $this->_rankid['rankid']));
+                                             'rankid' => $this->_action['rankid']));
       return $this->EffectOnlyRow();
     case 'partition.*structure': {
       $this->_classes->MakeEmpty();
@@ -578,6 +578,8 @@ class HistoryActionFormatter {
       }
       return $msg;
 
+    case 'timer.*overdue':
+      return "Timer contact lost.";
     case 'timer-message':
       switch ($this->_action['message']) {
       case 'HELLO': return 'Timer makes contact';
