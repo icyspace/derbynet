@@ -37,7 +37,7 @@
 
            <echo if:true="${pdf.uptodate}">pdf for @{file} is up to date</echo>
            
-           <exec executable="${soffice}" unless:true="${pdf.uptodate}">
+           <exec executable="${soffice}">
 	           <!-- This UserInstallation variable avoids any conflict with another
 		            running LibreOffice on Mac, but doesn't seem to work on
 		            Windows. -->

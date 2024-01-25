@@ -8,7 +8,8 @@ Visit http://jeffpiazza.github.io/derbynet/ for more information about DerbyNet.
 # I don't know when PHP picked up a dependency on tzdata and requires it be
 # configured, but that seems to be the case now.  Eastern time is convenient for
 # me, but may not be the best choice for everyone.
-ENV TZ=America/New_York
+
+ENV TZ=America/Chicago
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apk update && \
@@ -55,7 +56,11 @@ RUN bash /usr/local/bin/alpine-snakeoil.sh && \
 
 VOLUME /var/lib/derbynet
 
-EXPOSE 80 443
+EXPOSE 5000 5001
+
+# ARG http_port=80
+# ENV target_port ${http_port}
+
 STOPSIGNAL SIGTERM
 
 CMD ["/bin/bash", "-c", "php-fpm82 && chmod 777 /var/run/php/php-fpm.sock && nginx -g 'daemon off;'"]
