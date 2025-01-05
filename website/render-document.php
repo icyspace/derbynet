@@ -1,5 +1,7 @@
 <?php
 session_start();
+require_once('inc/data.inc');
+session_write_close();
 
 // Usage e.g. /derbynet/print.php/racer/CarTagsDocument
 
@@ -56,8 +58,8 @@ if (!$have_args && isset($_SERVER['ORIG_PATH_INFO'])) {
 }
 
 if (!$have_args) {
-  echo "Debugging \$_SERVER:\n";
-  var_export($_SERVER);
+  // echo "Debugging \$_SERVER:\n";
+  // var_export($_SERVER);
   exit(0);
 }
 

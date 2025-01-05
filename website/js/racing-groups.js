@@ -73,7 +73,7 @@ $(function() {
 });
 
 function on_n_pack_trophies_change(write_setting = true) {
-  var ntrophies = $("#n-pack").val();
+  var ntrophies = Number($("#n-pack").val());
   if (write_setting) {
     $.ajax('action.php',
            {type: 'POST',
@@ -124,6 +124,9 @@ $(function() {
 });
 
 function poll_for_structure() {
+  // This function only gets called when the page first loads or when
+  // changes are made.  No need to worry about processing a 'cease'
+  // flag.
   $.ajax('action.php',
          {type: 'GET',
           data: {query: 'poll',
@@ -197,6 +200,8 @@ function populate_racing_groups(data) {
                          .on('click', on_edit_class)));
 
     if (rule != 'by-partition') {
+      // If 'by-partition', don't show subgroups -- there's exactly one per
+      // group, with the same name.
       var subgroups = $("<ul/>")
           .appendTo(cl)
           .addClass('subgroups');
@@ -375,9 +380,11 @@ function populate_aggregates(classes, pack_aggregate_id) {
       $("li[data-classid='" + classes[i].constituents[v].classid + "']")
         .attr('data-constituent-of', classes[i].name);
     }
-    for (var v = 0; v < classes[i]['constituent-ranks'].length; ++v) {
-      $("li[data-rankid='" + classes[i]['constituent-ranks'][v].rankid + "']")
-        .attr('data-constituent-of', classes[i].name);
+    if (classes[i]['constituent-ranks']) {
+      for (var v = 0; v < classes[i]['constituent-ranks'].length; ++v) {
+        $("li[data-rankid='" + classes[i]['constituent-ranks'][v].rankid + "']")
+          .attr('data-constituent-of', classes[i].name);
+      }
     }
 
     pack_agg.removeClass('hidden');

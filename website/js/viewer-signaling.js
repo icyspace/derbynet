@@ -13,17 +13,6 @@ function ice_candidate_key(candidate) {
     " (" + candidate.type + ")";
 }
 
-
-function make_viewer_id() {
-  var alphabet = "abcdefghjklmnpqrstuvwz0123456789";
-
-  var id = "viewer-";
-  for (var k = 0; k < 12; ++k) {
-    id += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return id;
-}
-
 // viewer_id is string identifying this viewer.
 // ideal is the ideal video stream width and height.
 // stream_cb gets called when a new stream is added.
@@ -31,7 +20,7 @@ function RemoteCamera(viewer_id, ideal, stream_cb) {
   let pc = null;
 
   let poller = new MessagePoller(
-    200 /* ms. */, viewer_id,
+    viewer_id,
     function(msg) {
       if (msg.type == 'offer') {
         if (!pc) {
@@ -40,10 +29,10 @@ function RemoteCamera(viewer_id, ideal, stream_cb) {
         pc.onicecandidate = function(event) {
           if (event.candidate) {
             viewer_sent(ice_candidate_key(event.candidate));
-            send_message('replay-camera',
-                         {type: 'ice-candidate',
-                          from: viewer_id,
-                          candidate: event.candidate});
+            poller.send_message({recipient: 'camera-replay',
+                                 type: 'ice-candidate',
+                                 from: viewer_id,
+                                 candidate: event.candidate.toJSON()});
           }
         };
         // TODO onaddstream is obsolete; ontrack should be used instead.
@@ -63,10 +52,10 @@ function RemoteCamera(viewer_id, ideal, stream_cb) {
           })
           .then(function() {
             viewer_sent('answer');
-            send_message('replay-camera',
-                         {type: 'answer',
-                          from: viewer_id,
-                          sdp: pc.localDescription});
+            poller.send_message({recipient: 'camera-replay',
+                                 type: 'answer',
+                                 from: viewer_id,
+                                 sdp: pc.localDescription.toJSON()});
           });
       } else if (msg.type == 'ice-candidate') {
         if (!pc) {
@@ -74,13 +63,15 @@ function RemoteCamera(viewer_id, ideal, stream_cb) {
         }
         let candidate = new RTCIceCandidate(msg.candidate);
         viewer_received(ice_candidate_key(candidate));
-        if (msg.from != 'replay-camera') {
+        if (msg.from != 'camera-replay') {
           console.log('ICE candidate from unknown sender ' + msg.from + '');
           return;
         }
         pc.addIceCandidate(candidate);
+      } else if (msg.type == 'solicitation') {
+        // Broadcast solicitation, intended for camera
       } else {
-        console.error('Unrecognized message ' + msg);
+        console.error('Unrecognized message ', msg);
       }
     });
 
@@ -92,15 +83,18 @@ function RemoteCamera(viewer_id, ideal, stream_cb) {
     }
     if (!pc) {
       viewer_sent('solicitation (nag)');
-      send_message('replay-camera',
-                   {type: 'solicitation', from: viewer_id, ideal: ideal});
+      poller.send_message({recipient: 'camera-replay', type: 'solicitation', from: viewer_id, ideal: ideal});
     }
   }, 10000);
 
   viewer_sent('solicitation');
-  send_message('replay-camera',
-               {type: 'solicitation', from: viewer_id, ideal: ideal});
+  poller.send_message({recipient: 'camera-replay', type: 'solicitation', from: viewer_id, ideal: ideal});
 
-  this.stop = function() { nag.clearInterval(); };
+  this.close = function() {
+    if (poller) {
+      poller.close();
+    }
+    poller = null;
+    clearInterval(nag);
+  };
 }
-

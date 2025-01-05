@@ -1,5 +1,7 @@
 <?php @session_start();
 require_once('inc/banner.inc');
+require_once('inc/data.inc');
+session_write_close();
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -15,6 +17,8 @@ require_once('inc/banner.inc');
 <script type="text/javascript" src="js/camera-signaling.js"></script>
 <script type="text/javascript" src="js/video-device-picker.js"></script>
 <script type="text/javascript">
+
+g_websocket_url = <?php echo json_encode(read_raceinfo('_websocket_url', '')); ?>;
 
 function logmessage(txt) {
   $("<p></p>").text(txt).appendTo($("#log"));

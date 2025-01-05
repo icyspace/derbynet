@@ -17,18 +17,12 @@ if (!have_permission(SET_UP_PERMISSION)) {
   } catch (PDOException $p) {
   }
 
-  $values_found = false;
   if ($_POST['script'] == 'schema') {
     // Special handling of the "schema" script (reinitializing the database):
     // preserve values for photo-directory and car-photo-directory, if these
     // exist.
     try {
-      $photo_dir = read_raceinfo('photo-directory');
-      $car_photo_dir = read_raceinfo('car-photo-directory');
-      $video_dir = read_raceinfo('video-directory');
-      $logs_dir = read_raceinfo('logs-directory');
-      $nlanes = get_lane_count();
-      $values_found = true;
+      $saved_raceinfo = save_selected_race_info_values(RACE_INFO_KEYS_FOR_SCHEMA_SCRIPT);
       remove_fake_images($photo_dir);
       remove_fake_images($car_photo_dir);
     } catch (PDOException $p) {
@@ -41,14 +35,8 @@ if (!have_permission(SET_UP_PERMISSION)) {
 
   json_out('executed', $executed);
 
-  if ($values_found) {
-    write_raceinfo('photo-directory', $photo_dir);
-    write_raceinfo('car-photo-directory', $car_photo_dir);
-    write_raceinfo('video-directory', $video_dir);
-    write_raceinfo('logs-directory', $logs_dir);
-    if ($nlanes) {
-      write_raceinfo('lane_count', $nlanes);
-    }
+  if (!empty($saved_raceinfo)) {
+    restore_saved_race_info_values($saved_raceinfo);
   }
 
   if ($_POST['script'] == 'update-schema') {

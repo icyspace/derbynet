@@ -1,7 +1,9 @@
 <?php session_start();
 require_once('inc/data.inc');
-require_once('inc/banner.inc');
 require_once('inc/authorize.inc');
+session_write_close();
+require_once('inc/banner.inc');
+require_once('inc/car-numbering.inc');
 require_once('inc/partitions.inc');
 require_once('inc/photo-config.inc');
 require_once('inc/locked.inc');
@@ -95,6 +97,8 @@ if (read_raceinfo('drop-slowest') && read_raceinfo('scoring', -1) == -1) {
 }
 $scoring = read_raceinfo('scoring', 0);
 
+list($car_numbering_mult, $car_numbering_smallest) = read_car_numbering_values();
+
 ?>
 
 <div class="block_buttons">
@@ -187,6 +191,25 @@ $scoring = read_raceinfo('scoring', 0);
         ?>/><label for="name-style-1">First name and last initial</label>
       </p>
 
+      <p>
+          <input type="hidden" id="car-numbering" name="car-numbering"
+                value="<?php echo read_raceinfo('car-numbering', '100+101'); ?>"/>
+          Assigned car numbers start at
+          <input type="radio" id="number-from-101" name="number-from" value="101"
+                 class="do-not-post not-mobile"<?php
+                      echo $car_numbering_smallest == 101 ? ' checked="checked"' : '';
+            ?>/><label for="number-from-101">101</label>
+          <input type="radio" id="number-from-1" name="number-from" value="1"
+                 class="do-not-post not-mobile"<?php
+                      echo $car_numbering_smallest == 1 ? ' checked="checked"' : '';
+            ?>/><label for="number-from-1">1</label><br/>&nbsp; and
+          <input type="checkbox" id="number-by-segment" name="number-by-segment"
+                 class="do-not-post not-mobile"
+                 <?php echo $car_numbering_mult == 0 ? '' : ' checked="checked"'; ?>/>
+          <label for="number-by-segment">the hundreds place increments for each
+                  <span class="partition-label"><?php echo partition_label_lc(); ?></span>.
+          </label>
+      </p>
     </div>
   </div>
 

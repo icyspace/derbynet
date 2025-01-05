@@ -18,9 +18,7 @@ function address_for_current_kiosk() {
   // The kiosk browser can include an 'id' or 'address' parameter which allows
   // an arbitrary string to be used as the address identifier.
   $addr = "";
-  if (isset($_GET['id'])) {
-    $addr = $_GET['id'];
-  } else if (isset($_GET['address'])) {
+  if (isset($_GET['address'])) {
     $addr = $_GET['address'];
   } else if (isset($_SESSION['address'])) {
     $addr = $_SESSION['address'];
@@ -29,6 +27,7 @@ function address_for_current_kiosk() {
     if (isset($_SERVER['REMOTE_PORT'])) {
       $port = $_SERVER['REMOTE_PORT'];
     } else {
+      // Randomness in the address!!
       $port = rand(100, 200);
     }
     $addr = $_SERVER['REMOTE_ADDR'].'+'.$port;
@@ -87,7 +86,7 @@ function madlib_string($addr) {
                'visitor', 'earthquake', 'poison', 'voyage', 'feast', 'riddle',
                'year'];
 
-  $crc = crc32($addr);
+  $crc = abs(crc32($addr));
   return $adjs[$crc % count($adjs)]." ".$nouns[($crc >> 16) % count($nouns)];
 }
 

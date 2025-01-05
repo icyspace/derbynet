@@ -39,6 +39,8 @@ class PortWrapper {
   reader;
   writer;
 
+  port_is_open;
+
   leftover;
   lines;
   last_char_received;
@@ -78,6 +80,8 @@ class PortWrapper {
 
     if (this.port_is_open) {
       try {
+        // Only try closing the port once
+        this.port_is_open = false;
         await this.port.close();
       } catch (err) {
         g_logger.internal_msg('PortWrapper.close catches', err);

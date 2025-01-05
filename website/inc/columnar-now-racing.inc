@@ -5,6 +5,7 @@ require_once('inc/json-current-racers.inc');
 require_once('inc/name-mangler.inc');
 
 $nlanes = get_lane_count();
+$linger_ms = read_raceinfo('now-racing-linger-ms', 10000);
 
 ?><!DOCTYPE html>
 <html>
@@ -20,6 +21,7 @@ $nlanes = get_lane_count();
 <script type="text/javascript" src="js/jquery-ui.min.js"></script>
 <?php require('inc/kiosk-poller.inc'); ?>
 <script type="text/javascript" src="js/now-racing-overlay.js"></script>
+<script type="text/javascript" src="js/now-racing-poller.js"></script>
 <script type="text/javascript" src="js/now-racing-columnar.js"></script>
 <script type="text/javascript">
 var g_number_of_lanes = <?php echo $nlanes; ?>;
@@ -30,6 +32,7 @@ if (g_number_of_lanes == 0) {
     },
     5000);
 }
+var g_linger_ms = <?php echo $linger_ms; ?>;
 
 var g_column_width_exact = $(window).width() / (g_number_of_lanes == 0 ? 1 : g_number_of_lanes);
 var g_column_width = Math.round(g_column_width_exact);

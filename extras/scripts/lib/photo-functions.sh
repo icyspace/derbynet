@@ -24,6 +24,24 @@ killall_gvfs_volume_monitor() {
     done &
 }
 
+rotate_logs() {
+    for LOG in uploads.log checkins.log ; do
+        if [[ -s ${LOG} ]] ; then
+            CDATE=$(date -d "1970-01-01 UTC + $(stat --format=%W ${LOG}) seconds" +"%Y-%m-%d-%H%M")
+            mv ${LOG} ${LOG}.${CDATE}
+        elif [[ -e ${LOG} ]] ; then
+            rm ${LOG}
+        fi
+        # Purge year-old logs
+        YEAR_AGO=$(date -d "-1 year" +"%Y-%m-%d-%H%M")
+        for OLD in ${LOG}.* ; do
+            if [[ -e ${OLD} && ${OLD} < ${LOG}.${YEAR_AGO} ]] ; then
+                rm ${OLD}
+            fi
+        done
+    done
+}
+
 check_for_barcode_quit() {
     read -t 0.5 BARCODE
     if [ "$BARCODE" = "QUITQUITQUIT" ] ; then
@@ -91,6 +109,14 @@ do_login() {
 # This should follow the do_login if we want the login's ADJUST_CLOCK behavior
 # to affect the choice of photo directory.
 define_photo_directory() {
+    # Clean up old photo directories
+    EXPIRATION_DATE=$(date -d "-2 weeks" +%Y-%m-%d)
+    for D in photos-* ; do
+        if [[ -d "${D}" && "${D}" < photos-${EXPIRATION_DATE} ]] ; then
+	    rm -rf "${D}"
+	fi
+    done
+
     CUR_DIR="`pwd`"
     test -z "$PHOTO_DIR" && PHOTO_DIR="$CUR_DIR/photos-`date '+%Y-%m-%d'`"
     test ! -d "$PHOTO_DIR" && mkdir "$PHOTO_DIR"
@@ -120,6 +146,21 @@ find_barcode_scanner() {
 # Input from the environment:
 #    BARCODE_SCANNER_DEVS
 check_scanner() {
+    # A barcode reader cabled to a pi will be seen like a local keyboard.  If
+    # we're running the script over ssh, the script won't see scanned inputs.
+    xhost >/dev/null 2>&1 || \
+        (echo ; echo ; echo "NOT RUNNING UNDER X" ; \
+         echo "LOCALLY-ATTACHED SCANNERS MAY NOT WORK" ; echo ; echo)
+
+    ## This tries to confirm that there's a barcode scanner directly attached.
+    ## The test is pretty sketchy, relying on the user having configured the
+    ## identifier for their particular scanner(s) in the BARCODE_SCANNER_DEVS
+    ## environment variable.  Since NOT having the scanner connected is
+    ## something the user will easily detect for themselves the first time they
+    ## attempt to use it, keepting this test seems not very worthwhile.
+
+    return
+    
     while [ -z "`find_barcode_scanner`" ] ; do
         echo Scanner not connected
         announce no-scanner
@@ -144,6 +185,7 @@ check_camera() {
         done
         echo Activating camera
         chdkptp -c -e"rec"
+        [ -x /usr/bin/flite ] && flite -t "Lights, camera, action"
     fi
 }
 

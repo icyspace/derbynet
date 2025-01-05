@@ -1,5 +1,8 @@
 <?php
 
+// This can be fairly memory-intensive if full-rez photos are used.
+// ini_set('memory_limit','500M');
+
 require_once('inc/partitions.inc');
 require_once('inc/path-info.inc');
 require_once('inc/photo-config.inc');

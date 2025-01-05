@@ -14,6 +14,10 @@ require_once('inc/rounds.inc');
 // disclaimer is moot.
 define("INJECTION_TIME_LIMIT", 10);  // in seconds
 
+// The overall request has to complete in this time, no matter how many racers
+// we attempt to inject.
+define("OVERALL_TIME_LIMIT", 1 * 60);
+
 $roundid = $_POST['roundid'];
 $racerid = $_POST['racerid'];
 $dry_run = $_POST['dry-run'];
@@ -133,8 +137,7 @@ class ScheduleAdjuster {
     $this->nheats = count($this->race_chart);
     $this->nheats_unraced = $this->nheats - $heats_raced;
     if ($trace) {
-      $this->trace = array( 'trace' );
-      $this->trace[] = $this->to_json();
+      $this->trace = array( 'trace', $this->to_json() );
     }
     $this->times['constructed'] = time() - $this->time0;
   }
@@ -331,6 +334,7 @@ class ScheduleAdjuster {
         }
       }
     }
+    $this->look_for_byes();
   }
 
   public function squeeze_out_byes() {
@@ -439,7 +443,7 @@ class ScheduleAdjuster {
   public function inject_new_racer($new_racer_id) {
     for ($run = 0; $run < $this->n_runs_per_lane; ++$run) {
       if ($this->trace) {
-        $this->trace[] = "Injecting for run $run";
+        $this->trace[] = "Injecting for run $run of ".$this->n_runs_per_lane;
       }
 
       $this->add_minimal_new_heats();
@@ -492,11 +496,7 @@ class ScheduleAdjuster {
   // Calculates the smallest number of heats that might accommodate a new racer,
   // and adds that many empty heats to race_chart.
   private function add_minimal_new_heats() {
-    if ($this->has_byes) {
-      $this->nheats_new = max(0, $this->nlanes_usable - $this->nheats_unraced);
-    } else {
-      $this->nheats_new = max(1, $this->nlanes_usable - $this->nheats_unraced);
-    }
+    $this->nheats_new = max($this->has_byes ? 0 : 1, $this->nlanes_usable - $this->nheats_unraced);
     if ($this->trace) {
       $this->trace[] = "Minimum $this->nheats_new new heats";
     }
@@ -762,64 +762,85 @@ function update_race_chart($roundid, &$race_chart, &$renumbering_map) {
 if (!have_permission(CONTROL_RACE_PERMISSION)) {
   json_not_authorized();
 } else {
-  $t0 = time();
-
-  $adj = new ScheduleAdjuster($roundid, $trace);
-
-  $adj->remove_departed();
-
-  $t1 = time();
-
-  if ($racerid) {
-    $adj->inject_new_racer($racerid);
-  } else {
-    // Insert all the racers not already in the schedule.
-    $racer_stmt = $db->prepare('SELECT racerid FROM Roster'
-                               .' WHERE roundid = :roundid'
-                               .' AND NOT EXISTS(SELECT 1 FROM RaceChart'
-                               .'                WHERE racerid = Roster.racerid'
-                               .'                AND roundid = :roundid2)');
-    $racer_stmt->execute(array(':roundid' => $roundid,
-                               ':roundid2' => $roundid));
-    foreach ($racer_stmt as $racer_row) {
-      $adj->inject_new_racer($racer_row['racerid']);
-    }
+  $conflicting = read_raceinfo('reschedule_underway');
+  // The time limit check is to handle the case where an attempt timed out (by
+  // PHP or web server) and wasn't able to clear the marker.
+  if ($conflicting !== false && time() - $conflicting < 2 * OVERALL_TIME_LIMIT) {
+    json_failure('busy', 'Another schedule adjustment is already underway');
+    return;  // Quits the include()
   }
+  write_raceinfo('reschedule_underway', time());
+  try {
+    $t0 = time();
 
-  $t2 = time();
+    // For simulating slow responses:
+    // sleep(20);  // seconds
+    
+    $adj = new ScheduleAdjuster($roundid, $trace);
 
-  $adj->squeeze_out_byes();
+    $adj->remove_departed();
 
-  if ($trace) {
-    json_out('adjuster', $adj->to_json());
-  }
+    $t1 = time();
 
-  // May be false if there are no changes, or a rescheduling somehow failed.
-  $new_chart = $adj->updated_race_chart();
-
-  if ($new_chart !== null) {
-    $renumbering_map = $adj->renumbering_map();
-    $ok = true;
-    json_out('chart', $adj->chart_debug());
-
-    $t3 = $t2;
-    if (!$dry_run) {
-      update_race_chart($roundid, $new_chart, $renumbering_map);
-      $t3 = time();
-      assign_master_heats();
+    if ($racerid) {
+      $adj->inject_new_racer($racerid);
+    } else {
+      // Insert all the racers for this round not already in the schedule.
+      $racer_stmt = $db->prepare('SELECT racerid FROM Roster'
+                                 .' WHERE roundid = :roundid'
+                                 .' AND (SELECT passedinspection FROM RegistrationInfo'
+                                 .'      WHERE racerid = Roster.racerid) = 1'
+                                 .' AND NOT EXISTS(SELECT 1 FROM RaceChart'
+                                 .'                WHERE racerid = Roster.racerid'
+                                 .'                AND roundid = :roundid2)');
+      $racer_stmt->execute(array(':roundid' => $roundid,
+                                 ':roundid2' => $roundid));
+      foreach ($racer_stmt as $racer_row) {
+        if (time() - $t1 < OVERALL_TIME_LIMIT) {
+          record_action(array('action' => 'schedule.*reschedule',
+                              'racerid' => $racer_row['racerid']));
+          $adj->inject_new_racer($racer_row['racerid']);
+        }
+      }
     }
-    $t4 = time();
-    json_out("timing", array('load' => $t1 - $t0,
-                             'inject' => $t2 - $t1,
-                             'update' => $t3 - $t2,
-                             'master-heat' => $t4 - $t3,
-                             'internal' => $adj->times));
-    if ($ok) {
-      json_success();
-      mark_all_kiosks_for_reload();
-      require('ajax/query.poll.coordinator.inc');
+
+    $t2 = time();
+
+    $adj->squeeze_out_byes();
+
+    if ($trace) {
+      json_out('adjuster', $adj->to_json());
     }
-  } else {
-    json_failure('nochart', 'Unable to build new schedule');
+
+    // May be false if there are no changes, or a rescheduling somehow failed.
+    $new_chart = $adj->updated_race_chart();
+
+    if ($new_chart !== null) {
+      $renumbering_map = $adj->renumbering_map();
+      $ok = true;
+      json_out('chart', $adj->chart_debug());
+
+      $t3 = $t2;
+      if (!$dry_run) {
+        update_race_chart($roundid, $new_chart, $renumbering_map);
+        $t3 = time();
+        assign_master_heats();
+      }
+      $t4 = time();
+      json_out("timing", array('load' => $t1 - $t0,
+                               'inject' => $t2 - $t1,
+                               'update' => $t3 - $t2,
+                               'master-heat' => $t4 - $t3,
+                               'internal' => $adj->times));
+      if ($ok) {
+        json_success();
+        mark_all_kiosks_for_reload();
+        require('ajax/query.poll.coordinator.inc');
+      }
+    } else {
+      json_failure('nochart', 'Unable to build new schedule');
+    }
+  } finally {
+    delete_from_raceinfo('reschedule_underway');
   }
 }

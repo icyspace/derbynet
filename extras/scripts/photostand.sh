@@ -41,10 +41,9 @@ command -v wmctrl >/dev/null && wmctrl -a photostand
 
 . "$LIB_DIR"/photo-preamble.sh
 . "$LIB_DIR"/photo-functions.sh
-READ_BARCODE="$LIB_DIR"/read_barcode.py
+# READ_BARCODE="$LIB_DIR"/read_barcode.py
 
-rm uploads.log > /dev/null
-rm checkins.log > /dev/null
+rotate_logs
 
 killall_gvfs_volume_monitor
 
@@ -65,7 +64,7 @@ while true ; do
         sleep 5s
         continue
     fi
-    // BARCODE=`$READ_BARCODE "$DEV"`
+    # BARCODE=`$READ_BARCODE "$DEV"`
     read BARCODE
     echo Scanned $BARCODE
     CAR_NO=`echo $BARCODE | grep -e "^PWD" | sed -e "s/^PWD//"`
@@ -74,6 +73,10 @@ while true ; do
         sudo shutdown -h now
     elif [ "$BARCODE" = "PWDspeedtest" ] ; then
         upload_speed_test
+    elif [ "$BARCODE" = "PWDcheckin-ON" ] ; then
+      export PHOTO_CHECKIN=1
+    elif [ "$BARCODE" = "PWDcheckin-OFF" ] ; then
+      export PHOTO_CHECKIN=0
     elif [ "$CAR_NO" ] ; then
 
         maybe_check_in_racer

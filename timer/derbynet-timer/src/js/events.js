@@ -26,7 +26,7 @@ class TimerEvent {
     LANE_COUNT, // Some timers report how many lanes
     START_RACE,  // Remote start requested
     LOST_CONNECTION,
-    GATE_WATCHER_CHANGED
+    FASTTRACK_NO_LASER_RESET
   */
 
   static handlers = [];

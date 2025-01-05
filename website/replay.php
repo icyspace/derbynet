@@ -1,6 +1,7 @@
 <?php @session_start();
 require_once('inc/banner.inc');
 require_once('inc/data.inc');
+session_write_close();
 ?><!DOCTYPE html>
 <html>
 <head>
@@ -55,6 +56,11 @@ if (isset($_REQUEST['address'])) {
 <script type="text/javascript" src="js/video-device-picker.js"></script>
 <script type="text/javascript">
 
+g_websocket_url = <?php echo json_encode(read_raceinfo('_websocket_url', '')); ?>;
+// If using websockets to listen for replay messages, this variable will hold
+// the websocket object.
+var g_trigger_websocket;
+
 function logmessage(txt) {
   $("<p></p>").text(txt).appendTo($("#log"));
   let msgs = $("#log p");
@@ -63,18 +69,43 @@ function logmessage(txt) {
   }
 }
 
-function poll_as_replay() {
+// Avoid starting another poll request if another one is still in flight.
+g_poll_in_flight = false;
+
+function poll_once_for_replay() {
+  if (g_poll_in_flight) {
+    return;
+  }
+  g_poll_in_flight = true;
   $.ajax("action.php",
-  {type: 'POST',
-    data: {action: 'replay.message',
-           status: 0,
-           'finished-replay': 0},
-    success: function(data) {
-      for (let i = 0; i < data.replay.length; ++i) {
-        handle_replay_message(data.replay[i]);
-      }
-    }
-  });
+         {type: 'POST',
+          data: {action: 'replay.message',
+                 status: 0,
+                 'finished-replay': 0},
+          success: function(data) {
+            for (let i = 0; i < data.replay.length; ++i) {
+              handle_replay_message(data.replay[i]);
+            }
+          },
+          complete: function() {
+            // Called after success (or error)
+            g_poll_in_flight = false;
+          },
+         });
+}
+
+function listen_for_replay_messages() {
+  if (g_websocket_url != "") {
+    g_trigger_websocket = new MessagePoller(make_id_string('replay-'),
+                                            function(msg) { handle_replay_message(msg.cmd); },
+                                            ['replay-commands']);
+    // Even though we're using the websocket for triggering, poll every 5s (as
+    // opposed to several times per second), so we get credit for being
+    // connected.
+    setInterval(poll_once_for_replay, 5000);
+  } else {
+    setInterval(poll_once_for_replay, 250);
+  }
 }
 
 g_upload_videos = <?php echo read_raceinfo_boolean('upload-videos') ? "true" : "false"; ?>;
@@ -92,14 +123,17 @@ var g_recorder;
 
 var g_replay_options = {
   count: 2,
-  rate: 0.5,
-  length: 4
+  rate: 50,  // expressed as a percentage
+  length: 4000  // ms
 };
 
 function parse_replay_options(cmdline) {
+  g_replay_options.length = parseInt(cmdline.split(" ")[1]);
+  if (g_recorder) {
+    g_recorder.set_recording_length(g_replay_options.length);
+  }
   g_replay_options.count = parseInt(cmdline.split(" ")[2]);
-  g_replay_options.rate = parseFloat(cmdline.split(" ")[3]);
-  // TODO .length
+  g_replay_options.rate = parseInt(cmdline.split(" ")[3]);
 }
 
 // If non-zero, holds the timeout ID of a pending timeout that will trigger a
@@ -122,7 +156,6 @@ function handle_replay_message(cmdline) {
     g_preempted = false;
   } else if (cmdline.startsWith("REPLAY")) {
     // REPLAY skipback showings rate
-    //  skipback and rate are ignored, but showings we can honor
     // (Must be exactly one space between fields:)
     parse_replay_options(cmdline);
     if (!g_preempted) {
@@ -142,14 +175,14 @@ function handle_replay_message(cmdline) {
         console.log('Triggering replay from timeout after RACE_STARTS', root);
         on_replay(root);
       },
-      g_replay_options.length * 1000 - g_replay_timeout_epsilon);
+      g_replay_options.length - g_replay_timeout_epsilon);
   } else {
     console.log("Unrecognized replay message: " + cmdline);
   }
 }
 
 $(function() {
-  setInterval(poll_as_replay, 250);
+  listen_for_replay_messages();
   console.log('Replay page (re)loaded');
 });
 
@@ -187,8 +220,12 @@ function on_device_selection(selectq) {
   }
 
   if (device_id == 'remote') {
+    if (g_remote_poller) {
+      g_remote_poller.close();
+      g_remote_poller = null;
+    }
     $("#waiting-for-remote").removeClass('hidden');
-    let id = make_viewer_id();
+    let id = make_id_string("viewer-");
     console.log("Viewer id is " + id);
     g_remote_poller = new RemoteCamera(
       id,
@@ -196,6 +233,10 @@ function on_device_selection(selectq) {
        height: $(window).height()},
       on_remote_stream_ready);
   } else {
+    if (g_remote_poller) {
+      g_remote_poller.close();
+      g_remote_poller = null;
+    }
     $("#recording-stream-info").addClass('hidden');
     navigator.mediaDevices.getUserMedia(
       { video: {
@@ -263,24 +304,36 @@ function on_replay(root) {
   if (root != g_video_name_root) {
     console.log('** root=', root, ', g_video_name_root=', g_video_name_root);
   }
-  // Capture these global variables before starting the asynchronous operation,
-  // because they're reasonably likely to be clobbered by another queued message
+  // Capture this global variable before starting the asynchronous operation,
+  // because it's reasonably likely to be clobbered by another queued message
   // from the server.
   var upload = g_upload_videos;
+
   // If this is a replay triggered after RACE_START, make sure we don't start
   // another replay for the same heat.
-
   if (g_replay_timeout > 0) {
     clearTimeout(g_replay_timeout);
   }
   g_replay_timeout = 0;
 
-  announce_to_interior('replay-started');
   g_recorder.stop_recording();
 
+  var delay = $("#delay")[0].valueAsNumber * 1000;
+  if (delay > 0) {
+    setTimeout(function() { start_playback(root, upload); }, delay);
+  } else {
+    console.log('Direct playback');
+    start_playback(root, upload);
+  }
+}
+
+function start_playback(root, upload) {
   let playback = document.querySelector("#playback");
   playback.width = $(window).width();
   playback.height = $(window).height();
+
+  announce_to_interior('replay-started');
+
   $("#playback-background").show('slide', function() {
       let playback_start_ms = Date.now();
       let vc;
@@ -385,21 +438,32 @@ $(window).on('resize', function(event) { on_setup(); });
     </div>
   </div>
 
-  <div id="device-picker-div">
-    <select id="device-picker"><option>Please wait</option></select>
+    <div id="device-picker-div">
+      <select id="device-picker"><option>Please wait</option></select>
+    </div>
+    <p id="recording-stream-info" class="hidden">
+      Recording at <span id="recording-stream-size"></span>
+    </p>
+
+  <div id="replay-setup-controls" style="margin-left: 25%; margin-right: 25%;">
+
+    <p>
+    <input type="checkbox" id="go-fullscreen" checked="checked"/>
+    <label for="go-fullscreen">Change to fullscreen?</label>
+    </p>
+
+    <label for="inner_url">URL:</label>
+    <input type="text" name="inner_url" id="inner_url" size="50"
+           value="<?php echo htmlspecialchars($kiosk_url, ENT_QUOTES, 'UTF-8'); ?>"/>
+
+    <p style="font-size: 1em; margin-left: 10%;">Delay playback by:
+    <input type="number" name="delay" id="delay" min="0" step="0.1" value="0.0" size="8"
+           style="font-size: 1em; width: 5em; "/>
+    (s) after heat ends
+    </p>
+
+    <input type="button" value="Proceed" onclick="on_proceed();"/>
   </div>
-  <p id="recording-stream-info" class="hidden">
-    Recording at <span id="recording-stream-size"></span>
-  </p>
-
-  <input type="checkbox" id="go-fullscreen" checked="checked"/>
-  <label for="go-fullscreen">Change to fullscreen?</label>
-  <br/>
-
-  <label for="inner_url">URL:</label>
-  <input type="text" name="inner_url" id="inner_url" size="100"
-         value="<?php echo htmlspecialchars($kiosk_url, ENT_QUOTES, 'UTF-8'); ?>"/>
-  <input type="button" value="Proceed" onclick="on_proceed();"/>
 </div>
 
 </body>

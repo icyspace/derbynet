@@ -16,6 +16,8 @@
      <os family="windows"/>
    </condition>
 
+   <available property="soffice_available" file="${soffice}"/>
+
    <target name="dist" depends="installation, after-installation, operation,
                                 advanced-topics, quickref">
    </target>
@@ -69,8 +71,9 @@
      <make-pdf file="Default Roles and Passwords.fodt"/>
      <make-pdf file="Timer Operation.fodt"/>
      <make-pdf file="Running a Race with DerbyNet.fodt"/>
+     <make-pdf file="Photo Capture Stand.fodt"/>
      <make-pdf file="Photo Upload Options.fodt"/>
-     <make-pdf file="Webcams and Secure Contexts.fodt"/>
+     <make-pdf file="Secure Contexts and DerbyNet.fodt"/>
      <make-pdf file="Live Streaming DerbyNet.fodt"/>
      <make-pdf file="Online Balloting in DerbyNet.fodt"/>
  </target>

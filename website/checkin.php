@@ -1,8 +1,10 @@
 <?php @session_start(); ?>
 <?php
 require_once('inc/data.inc');
-require_once('inc/banner.inc');
 require_once('inc/authorize.inc');
+session_write_close();
+require_once('inc/banner.inc');
+require_once('inc/car-numbering.inc');
 require_once('inc/schema_version.inc');
 require_once('inc/photo-config.inc');
 require_once('inc/classes.inc');
@@ -35,8 +37,8 @@ $xbs = read_raceinfo_boolean('use-xbs');
 $xbs_award_name = xbs_award();
 
 $order = '';
-if (isset($_GET['order']))
-  $order = $_GET['order'];  // Values are: name, class, car, partition
+if (isset($_GET['order']) && in_array($_GET['order'], ['name', 'class', 'car', 'partition']))
+  $order = $_GET['order'];
 if (!$order)
     $order = 'name';
 
@@ -72,6 +74,13 @@ var g_action_on_barcode = "<?php
 
 var g_preferred_urls = <?php echo json_encode(preferred_urls(/*use_https=*/true),
                                               JSON_HEX_TAG | JSON_HEX_AMP | JSON_PRETTY_PRINT); ?>;
+
+function set_checkin_table_height() {
+  $("#main-checkin-table-div").height(
+      $(window).height() - $(".banner").height() - $("#top-buttons").height());
+}
+$(function() { set_checkin_table_height(); });
+$(window).on('resize', set_checkin_table_height);
 </script>
 <script type="text/javascript" src="js/mobile.js"></script>
 <script type="text/javascript" src="js/dashboard-ajax.js"></script>
@@ -88,7 +97,7 @@ var g_preferred_urls = <?php echo json_encode(preferred_urls(/*use_https=*/true)
 make_banner('Racer Check-In');
 ?>
 
-<div class="block_buttons">
+<div id="top-buttons" class="block_buttons">
   <img id="barcode-button" src="img/barcode.png"
       onclick="handle_barcode_button_click()"/>
   <input id="mobile-button" type="button" value="Mobile"
@@ -105,7 +114,8 @@ make_banner('Racer Check-In');
 <?php } ?>
 </div>
 
-<table id="main_checkin_table" class="main_table">
+<div id="main-checkin-table-div">
+<table id="main-checkin-table" class="main_table">
 <thead>
   <tr>
     <th/>
@@ -128,11 +138,6 @@ make_banner('Racer Check-In');
 
 </tbody>
 </table>
-<div class="block_buttons">
-<?php if (have_permission(REGISTER_NEW_RACER_PERMISSION)) { ?>
-      <input type="button" value="New Racer"
-        onclick='show_new_racer_form();'/>
-<?php } ?>
 </div>
 
 <?php
@@ -326,7 +331,7 @@ mobile_select_refresh($("#bulk_who"));
   <input type="button" value="Bulk Check-In Undo"
     onclick="bulk_check_in(false);"/>
   <br/>
-  <input type="button" value="Bulk Numbering"
+  <input type="button" value="Bulk Renumbering"
     onclick="bulk_numbering();"/>
   <input type="button" value="Bulk Eligibility"
     onclick="bulk_eligibility();"/>
@@ -346,13 +351,33 @@ mobile_select_refresh($("#bulk_who"));
       </select>
 
       <div id="numbering_controls" class="hidable">
-        <label for="bulk_numbering_start">Starting from:</label>
-        <input type="number" id="bulk_numbering_start" name="bulk_numbering_start"
-               value="101"/>
+        <label for="number_auto">Numbering:</label>
+        <input id="number_auto" name="number_auto"
+               type="checkbox" class="flipswitch eligible-flip"
+               checked="checked"
+               data-wrapper-class="trophy-eligible-flipswitch"
+               data-off-text="Custom"
+               data-on-text="Standard"/>
+        <?php
+            list($car_numbering_mult, $car_numbering_smallest) = read_car_numbering_values();
+        ?>
+        <div id="numbering_start_div" style="display: none">
+          <label for="bulk_numbering_start">Custom numbering from:</label>
+          <input type="number" id="bulk_numbering_start" name="bulk_numbering_start"
+                                                            disabled="disabled"
+                 value="<?php echo $car_numbering_smallest; ?>"/>
+        </div>
+        <div id="bulk_numbering_explanation">
+           <p>Car numbers start at <?php echo $car_numbering_smallest; ?><?php
+              if ($car_numbering_mult != 0) { ?><br/>
+                  and the hundreds place increments for each <?php echo partition_label_lc(); ?>.
+              <?php }
+              else {
+                echo ".";
+              } ?>
+           </p>
+       </div>
 
-        <label for="renumber">Renumber cars that already have numbers?</label>
-          <input type="checkbox" class="flipswitch renumber-flip" name="renumber" id="renumber"
-                 data-on-text="Yes" data-off-text="No"    />
       </div>
 
       <div id="elibility_controls" class="hidable">

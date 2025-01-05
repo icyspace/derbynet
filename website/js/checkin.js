@@ -2,29 +2,38 @@
 // Requires modal.js
 
 // Maps partitionid to highest existing carnumber for that partitionid
-g_max_carnumbers = [];
+g_next_carnumbers = [];
+g_poll_max_interval = 0;
 function poll_max_carnumbers() {
   $.ajax(g_action_url,
          {type: 'GET',
           data: {query: 'poll',
                  values: 'car-numbers'},
           success: function (data) {
+            if (data["cease"]) {
+              clearInterval(g_poll_max_interval);
+              window.location.href = '../index.php';
+              return;
+            }
             if (data.hasOwnProperty('car-numbers')) {
-              var carnos = data['car-numbers'];
-              for (var i = 0; i < carnos.length; ++i) {
-                g_max_carnumbers[parseInt(carnos[i].partitionid)] =
-                  carnos[i].max_carnumber;
-              }
+              read_next_carnumbers(data['car-numbers']);
             }
           }
          });
 }
+
+// carnos is an array of {partitionid, next_carnumber}
+function read_next_carnumbers(carnos) {
+  for (var i = 0; i < carnos.length; ++i) {
+    g_next_carnumbers[parseInt(carnos[i].partitionid)] =
+      carnos[i].next_carnumber;
+  }
+}
 function next_carnumber(partitionid) {
-  // NOTE: 100 * partitionid expression also in car-numbers poll query
-  return 1 + (g_max_carnumbers[partitionid] || (100 * partitionid));
+  return g_next_carnumbers[partitionid] || 999;
 }
 $(function() {
-  setInterval(poll_max_carnumbers, 10000);
+  g_poll_max_interval = setInterval(poll_max_carnumbers, 10000);
   poll_max_carnumbers();
 
   $("#edit_partition").on('change', function(event) {
@@ -231,21 +240,27 @@ function handle_edit_racer() {
             if (data.hasOwnProperty('warnings')) {
               window.alert("WARNING: " + data.warnings[0]);
             }
+            if (data.hasOwnProperty('car-numbers')) {
+              read_next_carnumbers(data['car-numbers']);
+            }
             if (data.hasOwnProperty('new-row')) {
               var row = addrow0(data['new-row']);
               flipswitch(row.find('input[type="checkbox"].flipswitch'));
               setTimeout(function() { scroll_and_flash_row(row); }, 100);
             } else {
+              console.log('Changing partition to ' + new_div_name);
+              $("#div-" + racerid)
+                .attr('data-partitionid', new_div_id)
+                .attr('data-div-sortorder', data['partition-sortorder'])
+                .text(new_div_name);
+              $("#lastname-" + racerid)
+                .attr("data-exclude", exclude ? 1 : 0)
+                .text(new_lastname)
+                .parents('tr').toggleClass('exclude', exclude == 1);
               $("#firstname-" + racerid).text(new_firstname);
-              var ln = $("#lastname-" + racerid);
-              ln.text(new_lastname);
-              ln.attr("data-exclude", exclude ? 1 : 0);
-              ln.parents('tr').toggleClass('exclude', exclude == 1);
-              $("#car-number-" + racerid).text(new_carno);
+              $("#car-number-" + racerid).attr('data-car-number', new_carno).text(new_carno);
               $("#car-name-" + racerid).text(new_carname);
               $("#note-from-" + racerid).text(new_note_from);
-              console.log('Changing partition to ' + new_div_name);
-              $("#div-" + racerid).attr('data-partitionid', new_div_id).text(new_div_name);
             }
 
             sort_checkin_table();
@@ -306,9 +321,25 @@ function bulk_check_in(value) {
   });
 }
 
+
+function on_bulk_numbering_change() {
+  $("#bulk_numbering_start").prop('disabled', $("#number_auto").is(':checked'));
+  if (!$("#number_auto").is(':checked')) {
+    $("#numbering_start_div").slideDown(500);
+    $("#bulk_numbering_explanation").slideUp(500);
+    $("#bulk_numbering_start").focus();
+  } else {
+    $("#numbering_start_div").slideUp(500);
+    $("#bulk_numbering_explanation").slideDown(500);
+  }
+}
+$(function() {
+  $("#number_auto").on('change', on_bulk_numbering_change);
+});
+
 function bulk_numbering() {
   close_modal_leave_background("#bulk_modal");
-  $("#bulk_details_title").text("Bulk Numbering");
+  $("#bulk_details_title").text("Bulk Renumbering");
   $("#who_label").text("Assign car numbers to");
   $("#bulk_details div.hidable").addClass("hidden");
   $("#numbering_controls").removeClass("hidden");
@@ -320,8 +351,9 @@ function bulk_numbering() {
             data: {action: 'racer.bulk',
                    what: 'number',
                    who: bulk_who_value(),
+                   auto: $("#number_auto").is(':checked') ? 1 : 0,
                    start: $("#bulk_numbering_start").val(),
-                   renumber: $("#renumber").is(':checked') ? 1 : 0},
+                  }
            });
     
     return false;
@@ -369,11 +401,6 @@ function sorting_key(row) {
   if (g_order == 'partition') {
     // partition sortorder, lastname, firstname
     return [parseInt(row.querySelector('[data-div-sortorder]').getAttribute('data-div-sortorder')),
-            row.getElementsByClassName('sort-lastname')[0].innerHTML,
-            row.getElementsByClassName('sort-firstname')[0].innerHTML]
-  } else if (g_order == 'class') {
-    // rankseq, lastname, firstname
-    return [parseInt(row.querySelector('[data-rankseq]').getAttribute('data-rankseq')),
             row.getElementsByClassName('sort-lastname')[0].innerHTML,
             row.getElementsByClassName('sort-firstname')[0].innerHTML]
   } else if (g_order == 'car') {
@@ -493,7 +520,8 @@ function cancel_find_racer() {
 }
 
 function scroll_and_flash_row(row) {
-  $("html, body").animate({scrollTop: row.offset().top - $(window).height() / 2}, 250);
+  scroll_to_row(row);
+
   row.addClass('highlight');
   setTimeout(function() {
     row.removeClass('highlight');
@@ -564,7 +592,7 @@ function find_racer() {
   if (search_string.length == 0) {
     cancel_find_racer();
   } else {
-    var domain = $("#main_checkin_table tbody tr")
+    var domain = $("#main-checkin-table tbody tr")
         .find("td.sort-firstname, td.sort-lastname, td.sort-car-number");
     var find_count = domain.filter(function() {
       // this = <td> element for firstname, lastname, or car number
@@ -586,8 +614,7 @@ function find_racer() {
       $("#find-racer-index").data("index", 1).text(1);
       $("#find-racer-count").text(find_count);
       $("#find-racer-message").css({visibility: 'visible'});
-      // Scroll the first selection to the middle of the window
-      $("html, body").animate({scrollTop: $("span.found-racer").offset().top - $(window).height() / 2}, 250);
+      scroll_to_nth_found_racer(1);
     } else {
       console.log("No match!");
       $("#find-racer").addClass("notfound");
@@ -598,9 +625,23 @@ function find_racer() {
   }
 }
 
+function scroll_to_row(row) {  // row is a jquery for one tr element
+  var div = $("#main-checkin-table-div");
+  var th_height = $("#main-checkin-table th").eq(0).closest('tr').height();
+  // delta is the number of pixels from the top of the table to the middle of the row
+  var delta = row.offset().top + row.height() / 2 - $("#main-checkin-table").offset().top;
+
+  // pixels from the top of the div that vertically centers the tr, excluding the th row
+  var goal = (div.height() - th_height) / 2 + th_height;
+
+  // scrollTop + goal = delta, so scrollTop = delta - goal
+
+  var padding = 10;  // 10 pixels vertical padding on tbody
+  $("#main-checkin-table-div").animate({scrollTop: delta - goal + padding});
+}
+
 function scroll_to_nth_found_racer(n) {
-  var found = $("span.found-racer").eq(n - 1);
-  $("html, body").animate({scrollTop: found.offset().top - $(window).height() / 2}, 250);
+  scroll_to_row($("span.found-racer").eq(n - 1).closest('tr'));
 }
 
 // inc = 1 for next found racer, -1 for previous
@@ -698,28 +739,26 @@ function make_table_row(racer, xbs) {
                     .text(racer.note)));
 
   var checkin = $('<td class="checkin-status"/>').appendTo(tr);
+  checkin.append('<br/>');
+  checkin.append($('<input type="checkbox" class="flipswitch"/>')
+                 .attr('id', 'passed-' + racer.racerid)
+                 .attr('name', 'passed-' + racer.racerid)
+                 .prop('checked', racer.passed)
+                 .attr('data-on-text', 'Yes')
+                 .attr('data-off-text', 'No')
+                 // prop onchange doesn't seem to allow a string, but attr does
+                 .attr('onchange', 'handlechange_passed(this, ' +
+                       JSON.stringify(racer.firstname + ' ' + racer.lastname) +
+                       ')'));
   if (racer.scheduled) {
     if (racer.passed) {
-      checkin.text('Racing');
+      checkin.append(' Racing!');
     } else {
-      checkin.text('Scheduled but not passed');
+      checkin.append(' Scheduled but not passed');
     }
-  } else {
-    checkin.append($('<label/>')
-                   .attr('for', 'passed-' + racer.racerid)
-                   .text('Checked In?'));
-    checkin.append('<br/>');
-    checkin.append($('<input type="checkbox" class="flipswitch"/>')
-                   .attr('id', 'passed-' + racer.racerid)
-                   .attr('name', 'passed-' + racer.racerid)
-                   .prop('checked', racer.passed)
-                   // prop onchange doesn't seem to allow a string, but attr does
-                   .attr('onchange', 'handlechange_passed(this, ' +
-                         JSON.stringify(racer.firstname + ' ' + racer.lastname) +
-                         ')'));
-    if (racer.denscheduled) {
-      checkin.append(' Late!');
-    }
+  } else if (racer.denscheduled) {
+    // denscheduled means their racing group has a schedule
+    checkin.append(' Late!');
   }
 
   if (xbs) {

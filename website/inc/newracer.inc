@@ -1,11 +1,12 @@
 <?php
+require_once('inc/car-numbering.inc');
+require_once('inc/class_add_or_delete.inc');
+require_once('inc/events.inc');
+require_once('inc/partitions.inc');
 require_once('inc/schema_version.inc');
 require_once('inc/sql-script.inc');
 require_once(sql_file_path('column-widths'));
-require_once('inc/class_add_or_delete.inc');
 require_once('inc/rank_add_or_delete.inc');
-require_once('inc/partitions.inc');
-require_once('inc/events.inc');
 
 define('UNSPECIFIED_CLASS', '* Not specified');
 define('UNSPECIFIED_RANK', '* Not specified');
@@ -38,13 +39,7 @@ function insert_new_racer($values) {
   }
   
   if (!isset($values['carnumber']) || $values['carnumber'] == '') {
-    $max_carnumber = read_single_value('SELECT MAX(carnumber) FROM RegistrationInfo'
-                                       .' WHERE partitionid = :partitionid',
-                                       array(':partitionid' => $values['partitionid']));
-    if (!$max_carnumber) {
-      $max_carnumber = ($values['partitionid'] - 1) * 100;
-    }
-    $values['carnumber'] = $max_carnumber + 1;
+    $values['carnumber'] = next_car_number_for_partition($values['partitionid']);
   }
 
   if (read_single_value('SELECT COUNT(*) FROM RegistrationInfo'
@@ -77,18 +72,24 @@ function insert_new_racer($values) {
                        ':classid' => $values['classid'],
                        ':exclude' => (isset($values['exclude']) && $values['exclude']) ? 1 : 0));
 
+  $racerid = 0;
+  try {
+    // Sqlite3 supports this, other databases might not
+    $racerid = read_single_value('SELECT last_insert_rowid()');
+  } catch (Exception $e) {
+  }
+  if ($racerid == 0) {
+    // If last_insert_rowid() didn't work, then this approximation will have to do
+    $racerid = read_single_value('SELECT MAX(racerid) FROM RegistrationInfo'
+                                 .' WHERE firstname = :firstname and lastname = :lastname'
+                                 .'  AND partitionid = :partitionid',
+                                 array(':firstname' => trim($values['firstname']),
+                                       ':lastname' => trim($values['lastname']),
+                                       ':partitionid' => $values['partitionid']));
+  }
+
   // The new racer won't be recognized without a Roster record to go with it.
   fill_in_missing_roster_entries();
-
-  // Return racerid
-  $stmt = $db->prepare('SELECT racerid FROM RegistrationInfo'
-                       .' WHERE firstname = :firstname and lastname = :lastname'
-                       .'  AND partitionid = :partitionid');
-  $stmt->execute(array(':firstname' => trim($values['firstname']),
-                       ':lastname' => trim($values['lastname']),
-                       ':partitionid' => $values['partitionid']));
-  $rs = $stmt->fetch(PDO::FETCH_NUM);
-  $racerid = $rs[0];
 
   record_action(array('action' => 'racer.*create',
                       'racerid' => $racerid,
