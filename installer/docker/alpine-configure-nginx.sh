@@ -41,13 +41,13 @@ log_format derbynet_log
 # access_log off;
 
 server {
-	listen 80 default_server;
-	listen [::]:80 default_server;
+	listen 5000 default_server;
+	listen [::]:5000 default_server;
 
 	# SSL configuration
 	#
-	listen 443 ssl default_server;
-	listen [::]:443 ssl default_server;
+	listen 5001 ssl default_server;
+	listen [::]:5001 ssl default_server;
 	#
 	# Note: You should disable gzip for SSL traffic.
 	# See: https://bugs.debian.org/773332

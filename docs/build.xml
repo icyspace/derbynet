@@ -9,11 +9,9 @@
    <!-- Set soffice for Windows if that's where we are, otherwise use
 	standard (Mac) value -->
    <condition property="soffice"
-	      value="\Program Files (x86)\LibreOffice 5\program\soffice.exe">
+	      value="\Program Files\LibreOffice\program\soffice.exe">
      <os family="windows"/>
    </condition>
-   <property name="soffice"
-	     location="/Applications/LibreOffice.app/Contents/MacOS/soffice"/>
    <condition property="is_windows">
      <os family="windows"/>
    </condition>
@@ -41,7 +39,7 @@
 
            <echo if:true="${pdf.uptodate}">pdf for @{file} is up to date</echo>
            
-           <exec executable="${soffice}" unless:true="${pdf.uptodate}">
+           <exec executable="${soffice}">
 	           <!-- This UserInstallation variable avoids any conflict with another
 		            running LibreOffice on Mac, but doesn't seem to work on
 		            Windows. -->
